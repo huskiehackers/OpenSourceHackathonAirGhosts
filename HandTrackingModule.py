@@ -32,7 +32,7 @@ class handDetector():
                 cx, cy = int(lm.x*w), int(lm.y*h)
                 self.lmList.append([id, cx, cy])
                 if draw:
-                    cv2.circle(img, (cx,cy), 5, (255,0,0),cv2.FILLED)
+                    cv2.circle(img, (cx,cy), 5, (255,0,255), cv2.FILLED)
         return self.lmList
 
     def fingersUp(self):
@@ -47,18 +47,3 @@ class handDetector():
             else:
                 fingers.append(0)
         return fingers
-
-
-# def main():
-#     cap = cv2.VideoCapture(0)
-#     detector = handDetector()
-#     while True:
-#         success, img = cap.read()
-#         img = cv2.flip(img,1)
-#         img = detector.findHands(img)
-#         lmList = detector.findPosition(img)
-#         cv2.imshow("Image", img)
-#         cv2.waitKey(1)
-#
-# def __name__ == "__main__":
-#     main()
