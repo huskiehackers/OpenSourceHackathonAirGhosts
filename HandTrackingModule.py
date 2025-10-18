@@ -32,7 +32,12 @@ class handDetector():
                 cx, cy = int(lm.x*w), int(lm.y*h)
                 self.lmList.append([id, cx, cy])
                 if draw:
-                    cv2.circle(img, (cx,cy), 5, (255,0,255), cv2.FILLED)
+                    if id == 0:
+                        cv2.circle(img, (cx,cy), 5, (255,0,0), cv2.FILLED)
+                    elif id % 4 == 1 and id != 1:
+                        cv2.circle(img, (cx,cy), 5, (0,0,255), cv2.FILLED)
+                    elif id % 4 == 2 and id != 2:
+                        cv2.circle(img, (cx,cy), 5, (255,0,255), cv2.FILLED)
         return self.lmList
 
     def fingersUp(self):
@@ -47,3 +52,28 @@ class handDetector():
             else:
                 fingers.append(0)
         return fingers
+    
+    def fistClosed(self):
+        fingers = self.fingersUp()
+        if fingers[1] == 0 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] == 0:
+            return True
+        else:
+            return False
+
+    def fistOrientation(self):
+        knuckles = [self.lmList[5], self.lmList[9], self.lmList[13], self.lmList[17]]
+
+        # Calculate average x and y positions of knuckles
+        x_positions = [pt[1] for pt in knuckles]
+        y_positions = [pt[2] for pt in knuckles]
+
+        x_range = max(x_positions) - min(x_positions)
+        y_range = max(y_positions) - min(y_positions)
+
+        tolerance = 20  # pixels, adjust as needed
+
+        if x_range > y_range + tolerance:
+            return "horizontal"
+        elif y_range > x_range + tolerance:
+            return "vertical"
+
