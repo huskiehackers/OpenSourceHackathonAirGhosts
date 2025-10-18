@@ -34,9 +34,9 @@ class handDetector():
                 if draw:
                     if id == 0:
                         cv2.circle(img, (cx,cy), 5, (255,0,0), cv2.FILLED)
-                    elif id % 4 == 1 and id != 1:
+                    elif id == 5:
                         cv2.circle(img, (cx,cy), 5, (0,0,255), cv2.FILLED)
-                    elif id % 4 == 2 and id != 2:
+                    elif id == 6:
                         cv2.circle(img, (cx,cy), 5, (255,0,255), cv2.FILLED)
         return self.lmList
 
@@ -53,13 +53,6 @@ class handDetector():
                 fingers.append(0)
         return fingers
     
-    def fistClosed(self):
-        fingers = self.fingersUp()
-        if fingers[1] == 0 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] == 0:
-            return True
-        else:
-            return False
-
     def fistOrientation(self):
         knuckles = [self.lmList[5], self.lmList[9], self.lmList[13], self.lmList[17]]
 
