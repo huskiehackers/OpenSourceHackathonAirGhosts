@@ -7,6 +7,7 @@ from tensorflow.keras.models import load_model
 import keyboard
 import pygame
 import time
+import Ghost
 
 
 VirtualPainter = Blueprint("HandTrackingModule", __name__, static_folder="static",template_folder="templates")
@@ -36,20 +37,21 @@ def strt():
     pygame.init()
     DISPLAYSURF = pygame.display.set_mode((width, height),flags=pygame.HIDDEN)
     pygame.display.set_caption("Digit Board")
-    number_xcord = []
-    number_ycord = []
+    shape_xcoords = []
+    shape_ycoords = []
 
 
-    ############## Header Files Attributes ###############
+    ############## Asset Files Attributes ###############
     folderPath = "assets"
-    myList = os.listdir(folderPath)
-    overlayList = []
 
-    for imPath in myList:
-        image = cv2.imread(f'{folderPath}/{imPath}')
-        overlayList.append(image)
+    ghostimg = cv2.imread(os.path.join(folderPath, "ghost.png"), cv2.IMREAD_UNCHANGED)
+    ghostHeight, ghostWidth = 150, 150
+    ghostimg = cv2.resize(ghostimg, (ghostWidth, ghostHeight))
 
-    wand = overlayList[0]
+
+    wandimg = cv2.imread(os.path.join(folderPath, "wand.png"))
+    wandHeight, wandWidth, _ = wandimg.shape
+
 
     ############## Predication Model Attributes ###############
     label=""
@@ -64,14 +66,21 @@ def strt():
     drawMode = "OFF"
     xp , yp = 0, 0
     brushThickness = 15
-    eraserThickness = 30
 
+    ############## Game Attributes ###############
+    playerScore = 0
+    playerHbWidth, playerHbHeight = 100, 100
+    playerPos = (width//2 - playerHbWidth//2, height*2//3 - playerHbHeight//2)
+    ghosts = [ Ghost.Ghost(np.random.randint(0, width - ghostWidth), np.random.randint(0, height - ghostHeight), playerPos[0] + playerHbWidth//2, playerPos[1] + playerHbHeight//2, speed=5) for _ in range(5) ]
+
+    ############## Main Loop ###############
     while True:
         SUCCESS, img = cap.read()
         img = cv2.flip(img,1)
 
-        cv2.putText(img,"Press SPACE for draw mode",(0,145),3,0.5,BLUE,1,cv2.LINE_AA)
-        cv2.putText(img,f'{"DRAW MODE IS "}{drawMode}',(0,162),3,0.5,BLUE,1,cv2.LINE_AA)
+        ########## DRAWING INTERFACE ##########
+        cv2.putText(img,"Press SPACE for draw mode",(0,145),3,0.5,BLACK,1,cv2.LINE_AA)
+        cv2.putText(img,f'{"DRAW MODE IS "}{drawMode}',(0,162),3,0.5,BLACK,1,cv2.LINE_AA)
 
         if keyboard.is_pressed('space'):
             if drawMode == "OFF":
@@ -84,7 +93,6 @@ def strt():
 
         img = detector.findHands(img, draw = False)
         lmList = detector.findPosition(img, draw = True)
-
         
         # Hand Detected
         if len(lmList)>0:
@@ -102,40 +110,46 @@ def strt():
             drawx,drawy = (lmList[topknuckle][1] + lmList[botknuckle][1]) // 2, (lmList[topknuckle][2] + lmList[botknuckle][2]) // 2 - offset
 
             if drawMode == "ON":
-                # Detect mode
+                # Predict mode
                 if fist == "horizontal":
                     drawColor = BLACK
 
-                    number_xcord = sorted(number_xcord)
-                    number_ycord = sorted(number_ycord)
+                    shape_xcoords = sorted(shape_xcoords)
+                    shape_ycoords = sorted(shape_ycoords)
 
-                    if(len(number_xcord) > 0 and len(number_ycord)>0):
+                    if(len(shape_xcoords) > 0 and len(shape_ycoords)>0):
+                        
+                        # Draw rectangle around the drawn shape
                         pad = 50
-                        rect_min_x, rect_max_x = max(number_xcord[0]-BOUNDRYINC - pad, 0), min(width, number_xcord[-1]+BOUNDRYINC + pad)
-                        rect_min_y, rect_max_y = max(0, number_ycord[0]-BOUNDRYINC - pad), min(number_ycord[-1]+BOUNDRYINC + pad, height)
-                        number_xcord = []
-                        number_ycord = []
+                        rect_min_x, rect_max_x = max(shape_xcoords[0]-BOUNDRYINC - pad, 0), min(width, shape_xcoords[-1]+BOUNDRYINC + pad)
+                        rect_min_y, rect_max_y = max(0, shape_ycoords[0]-BOUNDRYINC - pad), min(shape_ycoords[-1]+BOUNDRYINC + pad, height)
+                        cv2.rectangle(imgCanvas,(rect_min_x,rect_min_y),(rect_max_x,rect_max_y),BROWN,3)
 
                         img_arr = np.array(pygame.PixelArray(DISPLAYSURF))[rect_min_x:rect_max_x,rect_min_y:rect_max_y].T.astype(np.float32) 
-                        cv2.rectangle(imgCanvas,(rect_min_x,rect_min_y),(rect_max_x,rect_max_y),BROWN,3)
+
+                        # Normalize and resize the image before predication
                         image = cv2.resize(img_arr, (50,50))
                         image = cv2.resize(image,(50,50))/255
+
+                        # Get label from model prediction
                         label = str(shapeLABELS[np.argmax(model.predict(image.reshape(1,50,50,1)))])
 
-                        pygame.draw.rect(DISPLAYSURF,BLACK,(0,0,width,height))
-
+                        # Display the label on the screen
                         cv2.rectangle(imgCanvas,(rect_min_x+50,rect_min_y-20),(rect_min_x,rect_min_y),WHITE,-1)
                         cv2.putText(imgCanvas,label,(rect_min_x,rect_min_y-5),3,0.5,GREEN,1,cv2.LINE_AA)
 
-                    pygame.draw.line(DISPLAYSURF, BLACK, (xp,yp), (drawx,drawy), eraserThickness)
+                        # Reset coordinates for next shape
+                        shape_xcoords = []
+                        shape_ycoords = []
+
                     xp, yp = 0, 0
 
                 # Drawing Mode
                 elif fist == "vertical":
                     drawColor = GREEN
 
-                    number_xcord.append(drawx)
-                    number_ycord.append(drawy)
+                    shape_xcoords.append(drawx)
+                    shape_ycoords.append(drawy)
                     
                     if xp == 0 and yp == 0:
                         xp, yp = drawx, drawy
@@ -157,15 +171,58 @@ def strt():
                 return render_template("index.html")
                 quit()
 
+        ########## GAME ##########
+
+        cv2.putText(img,f'Score: {playerScore}',(10,70),3,1,BLACK,2,cv2.LINE_AA)
+        
+        # Draw player hitbox
+        cv2.rectangle(img, playerPos, (playerPos[0]+playerHbWidth, playerPos[1]+playerHbHeight), RED, 2)
+
+        # Move and draw ghosts
+        for g in ghosts:
+            g.move()
+            ghostX, ghostY = int(g.x), int(g.y)
+            overlay_transparent(img, ghostimg, ghostX, ghostY)
+
+            # Check collision with player
+            if (ghostX + ghostWidth > playerPos[0] and ghostX < playerPos[0] + playerHbWidth and
+                ghostY + ghostHeight > playerPos[1] and ghostY < playerPos[1] + playerHbHeight):
+                playerScore += 1
+                # Reset ghost position
+                g.x = np.random.randint(0, width - ghostWidth)
+                g.y = np.random.randint(0, height - ghostHeight)
+            
+
+
         imgGray = cv2.cvtColor(imgCanvas, cv2.COLOR_BGR2GRAY)
         _, imgInv = cv2.threshold(imgGray, 50, 255, cv2.THRESH_BINARY_INV)
         imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, imgCanvas)
         
-        #img[0:125, 1160:1280] = wand
+        #img[0:125, 1160:1280] = header
         pygame.display.update()
         cv2.imshow("Image",img)
         cv2.waitKey(1)
+
+def overlay_transparent(bg, fg, x, y):
+    h, w = fg.shape[:2]
+
+    # Split the channels of the foreground
+    b, g, r, a = cv2.split(fg)
+    alpha = a.astype(float) / 255.0
+    alpha = cv2.merge([alpha, alpha, alpha])
+
+    # Region of interest (ROI) in the background
+    roi = bg[y:y+h, x:x+w]
+
+    # Convert fg to BGR only
+    fg_rgb = cv2.merge([b, g, r]).astype(float)
+    bg_rgb = roi.astype(float)
+
+    # Blend the images
+    blended = cv2.add(fg_rgb * alpha, bg_rgb * (1 - alpha))
+
+    bg[y:y+h, x:x+w] = blended.astype(np.uint8)
 
 strt()
