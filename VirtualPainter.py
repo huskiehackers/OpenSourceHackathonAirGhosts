@@ -41,17 +41,15 @@ def strt():
 
 
     ############## Header Files Attributes ###############
-    
-    '''
-    folderPath = "header"
+    folderPath = "assets"
     myList = os.listdir(folderPath)
     overlayList = []
 
     for imPath in myList:
         image = cv2.imread(f'{folderPath}/{imPath}')
         overlayList.append(image)
-    header = overlayList[0]
-    '''
+
+    wand = overlayList[0]
 
     ############## Predication Model Attributes ###############
     label=""
@@ -63,6 +61,7 @@ def strt():
 
     ############## HandDetection Attributes ###############
     detector = htm.handDetector(detectionCon=0.85)
+    drawMode = "OFF"
     xp , yp = 0, 0
     brushThickness = 15
     eraserThickness = 30
@@ -71,76 +70,85 @@ def strt():
         SUCCESS, img = cap.read()
         img = cv2.flip(img,1)
 
+        cv2.putText(img,"Press SPACE for draw mode",(0,145),3,0.5,BLUE,1,cv2.LINE_AA)
+        cv2.putText(img,f'{"DRAW MODE IS "}{drawMode}',(0,162),3,0.5,BLUE,1,cv2.LINE_AA)
+
+        if keyboard.is_pressed('space'):
+            if drawMode == "OFF":
+                drawMode = "ON"
+            else:
+                drawMode = "OFF"
+                imgCanvas = np.zeros((height,width,3), np.uint8)
+                
+            time.sleep(0.3)
+
         img = detector.findHands(img, draw = False)
         lmList = detector.findPosition(img, draw = True)
+
         
         # Hand Detected
         if len(lmList)>0:
 
             fist = detector.fistOrientation()
-            fingers = detector.fingersUp()
 
             # Top pointer knuckle
-            tpk = 5
+            topknuckle = 5
             # Bottom pointer knuckle
-            bpk = 6
+            botknuckle = 6
+
             # Offset distance   
             offset = 100
-
             # Draw from knuckles of pointer finger with offset
-            drawx,drawy = (lmList[tpk][1] + lmList[bpk][1]) // 2, (lmList[tpk][2] + lmList[bpk][2]) // 2 - offset
-            
-            # Detect mode
-            if fist == "horizontal":
-                drawColor = BLACK
+            drawx,drawy = (lmList[topknuckle][1] + lmList[botknuckle][1]) // 2, (lmList[topknuckle][2] + lmList[botknuckle][2]) // 2 - offset
 
-                number_xcord = sorted(number_xcord)
-                number_ycord = sorted(number_ycord)
+            if drawMode == "ON":
+                # Detect mode
+                if fist == "horizontal":
+                    drawColor = BLACK
 
-                if(len(number_xcord) > 0 and len(number_ycord)>0):
-                    pad = 50
-                    rect_min_x, rect_max_x = max(number_xcord[0]-BOUNDRYINC - pad, 0), min(width, number_xcord[-1]+BOUNDRYINC + pad)
-                    rect_min_y, rect_max_y = max(0, number_ycord[0]-BOUNDRYINC - pad), min(number_ycord[-1]+BOUNDRYINC + pad, height)
-                    number_xcord = []
-                    number_ycord = []
+                    number_xcord = sorted(number_xcord)
+                    number_ycord = sorted(number_ycord)
 
-                    img_arr = np.array(pygame.PixelArray(DISPLAYSURF))[rect_min_x:rect_max_x,rect_min_y:rect_max_y].T.astype(np.float32) 
-                    cv2.rectangle(imgCanvas,(rect_min_x,rect_min_y),(rect_max_x,rect_max_y),BROWN,3)
-                    image = cv2.resize(img_arr, (50,50))
-                    image = cv2.resize(image,(50,50))/255
-                    label = str(shapeLABELS[np.argmax(model.predict(image.reshape(1,50,50,1)))])
+                    if(len(number_xcord) > 0 and len(number_ycord)>0):
+                        pad = 50
+                        rect_min_x, rect_max_x = max(number_xcord[0]-BOUNDRYINC - pad, 0), min(width, number_xcord[-1]+BOUNDRYINC + pad)
+                        rect_min_y, rect_max_y = max(0, number_ycord[0]-BOUNDRYINC - pad), min(number_ycord[-1]+BOUNDRYINC + pad, height)
+                        number_xcord = []
+                        number_ycord = []
 
-                    pygame.draw.rect(DISPLAYSURF,BLACK,(0,0,width,height))
+                        img_arr = np.array(pygame.PixelArray(DISPLAYSURF))[rect_min_x:rect_max_x,rect_min_y:rect_max_y].T.astype(np.float32) 
+                        cv2.rectangle(imgCanvas,(rect_min_x,rect_min_y),(rect_max_x,rect_max_y),BROWN,3)
+                        image = cv2.resize(img_arr, (50,50))
+                        image = cv2.resize(image,(50,50))/255
+                        label = str(shapeLABELS[np.argmax(model.predict(image.reshape(1,50,50,1)))])
 
-                    cv2.rectangle(imgCanvas,(rect_min_x+50,rect_min_y-20),(rect_min_x,rect_min_y),WHITE,-1)
-                    cv2.putText(imgCanvas,label,(rect_min_x,rect_min_y-5),3,0.5,GREEN,1,cv2.LINE_AA)
+                        pygame.draw.rect(DISPLAYSURF,BLACK,(0,0,width,height))
 
-                pygame.draw.line(DISPLAYSURF, BLACK, (xp,yp), (drawx,drawy), eraserThickness)
+                        cv2.rectangle(imgCanvas,(rect_min_x+50,rect_min_y-20),(rect_min_x,rect_min_y),WHITE,-1)
+                        cv2.putText(imgCanvas,label,(rect_min_x,rect_min_y-5),3,0.5,GREEN,1,cv2.LINE_AA)
 
-            # Drawing Mode
-            elif fist == "vertical":
-                drawColor = GREEN
+                    pygame.draw.line(DISPLAYSURF, BLACK, (xp,yp), (drawx,drawy), eraserThickness)
+                    xp, yp = 0, 0
 
-                number_xcord.append(drawx)
-                number_ycord.append(drawy)
-                
-                if xp == 0 and yp == 0:
+                # Drawing Mode
+                elif fist == "vertical":
+                    drawColor = GREEN
+
+                    number_xcord.append(drawx)
+                    number_ycord.append(drawy)
+                    
+                    if xp == 0 and yp == 0:
+                        xp, yp = drawx, drawy
+
+                    cv2.circle(img, (drawx,drawy-15), 15, drawColor, cv2.FILLED)
+
+                    cv2.line(img, (xp,yp), (drawx,drawy), drawColor, brushThickness)
+                    cv2.line(imgCanvas, (xp,yp), (drawx,drawy), drawColor, brushThickness)
+                    pygame.draw.line(DISPLAYSURF, WHITE, (xp,yp), (drawx,drawy), brushThickness)
                     xp, yp = drawx, drawy
 
-                cv2.circle(img, (drawx,drawy-15), 15, drawColor, cv2.FILLED)
-
-                cv2.line(img, (xp,yp), (drawx,drawy), drawColor, brushThickness)
-                cv2.line(imgCanvas, (xp,yp), (drawx,drawy), drawColor, brushThickness)
-                pygame.draw.line(DISPLAYSURF, WHITE, (xp,yp), (drawx,drawy), brushThickness)
-                xp, yp = drawx, drawy
-
-            # Erase Whole Canvas
-            #elif fingers[1] == 1 and fingers[2] == 1:
-                #imgCanvas = np.zeros((height, width, 3), np.uint8)  # Clears OpenCV canvas
-                #DISPLAYSURF.fill(BLACK)  # Clears PyGame surface
-
-            else:
-                xp, yp = 0, 0
+                else:
+                    xp, yp = 0, 0
 
             # End program when pointer goes to exit button
             if drawx > 1160 and drawy < 125:
@@ -149,14 +157,13 @@ def strt():
                 return render_template("index.html")
                 quit()
 
-
         imgGray = cv2.cvtColor(imgCanvas, cv2.COLOR_BGR2GRAY)
         _, imgInv = cv2.threshold(imgGray, 50, 255, cv2.THRESH_BINARY_INV)
         imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, imgCanvas)
         
-        #img[0:132,0:1280] = header
+        #img[0:125, 1160:1280] = wand
         pygame.display.update()
         cv2.imshow("Image",img)
         cv2.waitKey(1)
