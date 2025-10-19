@@ -183,6 +183,11 @@ def strt():
             g.move()
             ghostX, ghostY = int(g.x), int(g.y)
             overlay_transparent(img, ghostimg, ghostX, ghostY)
+            temp = 0
+            for s in g.symbols:
+                symbolX, symbolY = ghostX + (temp * 10), ghostY + ghostHeight + 10
+                overlay_transparent(img, ghostimg, symbolX, symbolY)
+                temp = temp + 1
 
             # Check collision with player
             if (ghostX + ghostWidth > playerPos[0] and ghostX < playerPos[0] + playerHbWidth and
