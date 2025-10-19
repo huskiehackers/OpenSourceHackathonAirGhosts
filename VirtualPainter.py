@@ -8,6 +8,7 @@ import keyboard
 import pygame
 import time
 import Ghost
+import random
 
 
 VirtualPainter = Blueprint("HandTrackingModule", __name__, static_folder="static",template_folder="templates")
@@ -22,7 +23,8 @@ def strt():
     BLUE = (255,0,0)
     BROWN = (19,69,139)
     GREEN = (0,255,0)
-    drawColor = GREEN
+    MAGENTA = (255,0,255)
+    drawColor = MAGENTA
     BOUNDRYINC = 5
 
     ############## CV2 Attributes ###############
@@ -44,14 +46,35 @@ def strt():
     ############## Asset Files Attributes ###############
     folderPath = "assets"
 
-    ghostimg = cv2.imread(os.path.join(folderPath, "ghost.png"), cv2.IMREAD_UNCHANGED)
+    heartWidth, heartHeight = 200, 200
+    heartimg = cv2.imread(os.path.join(folderPath, "heart.png"), cv2.IMREAD_UNCHANGED)
+    heartimg = cv2.resize(heartimg, (heartWidth, heartHeight))
+
     ghostHeight, ghostWidth = 150, 150
+    ghostimg = cv2.imread(os.path.join(folderPath, "ghost.png"), cv2.IMREAD_UNCHANGED)
     ghostimg = cv2.resize(ghostimg, (ghostWidth, ghostHeight))
 
+    symbolSize = (40, 40)
+    upimg = cv2.imread(os.path.join(folderPath, "UpArr.png"), cv2.IMREAD_UNCHANGED)
+    upimg = cv2.resize(upimg, symbolSize)
+    downimg = cv2.imread(os.path.join(folderPath, "DownArr.png"), cv2.IMREAD_UNCHANGED)
+    downimg = cv2.resize(downimg, symbolSize)
+    horzimg = cv2.imread(os.path.join(folderPath, "Hori.png"), cv2.IMREAD_UNCHANGED)
+    horzimg = cv2.resize(horzimg, symbolSize)
+    vertimg = cv2.imread(os.path.join(folderPath, "Vert.png"), cv2.IMREAD_UNCHANGED)
+    vertimg = cv2.resize(vertimg, symbolSize)
 
-    wandimg = cv2.imread(os.path.join(folderPath, "wand.png"))
-    wandHeight, wandWidth, _ = wandimg.shape
+    symbolImages = [downimg, horzimg, upimg, vertimg]
+    symbolColors = [GREEN, YELLOW, RED, BLUE]
 
+    wandWidth, wandHeight = 150, 150
+    wandimg = cv2.imread(os.path.join(folderPath, "wand.png"), cv2.IMREAD_UNCHANGED)
+    wandimg = cv2.resize(wandimg, (wandWidth, wandHeight))
+
+    wandimg_LHanded = cv2.rotate(wandimg, cv2.ROTATE_90_CLOCKWISE)
+    wandimg_RHanded = cv2.rotate(wandimg, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+    wandHand = ""
 
     ############## Predication Model Attributes ###############
     label=""
@@ -63,56 +86,87 @@ def strt():
 
     ############## HandDetection Attributes ###############
     detector = htm.handDetector(detectionCon=0.85)
-    drawMode = "OFF"
+    gameRunning = "OFF"
     xp , yp = 0, 0
     brushThickness = 15
+    labelIdx = -1
 
     ############## Game Attributes ###############
     playerScore = 0
-    playerHbWidth, playerHbHeight = 100, 100
+    maxLives = 5
+    currentLives = maxLives
+    playerHbWidth, playerHbHeight = 75, 75
     playerPos = (width//2 - playerHbWidth//2, height*2//3 - playerHbHeight//2)
-    ghosts = [ Ghost.Ghost(np.random.randint(0, width - ghostWidth), np.random.randint(0, height - ghostHeight), playerPos[0] + playerHbWidth//2, playerPos[1] + playerHbHeight//2, speed=5) for _ in range(5) ]
+
+    ghostSpeed = 2
+    ghostSpawnX = (0 - ghostWidth, width + ghostWidth)
+    ghostSpawnRate = 1
+    ghostSpawnCap = 1
+    ghosts = []
 
     ############## Main Loop ###############
     while True:
         SUCCESS, img = cap.read()
         img = cv2.flip(img,1)
 
-        ########## DRAWING INTERFACE ##########
-        cv2.putText(img,"Press SPACE for draw mode",(0,145),3,0.5,BLACK,1,cv2.LINE_AA)
-        cv2.putText(img,f'{"DRAW MODE IS "}{drawMode}',(0,162),3,0.5,BLACK,1,cv2.LINE_AA)
+        # Open Screen
+        if gameRunning == "OFF":
+            cv2.putText(img,"AIR DRAW: GHOST DRAW",(0, height // 4),3,3,WHITE,3,cv2.LINE_AA)
+            cv2.putText(img,"PRESS SPACE TO START",(0, height // 2),3,2,WHITE,3,cv2.LINE_AA)
+            cv2.putText(img,"PRESS ESCAPE TO EXIT",(0, height * 3 // 4),3,2,WHITE,3,cv2.LINE_AA)
 
-        if keyboard.is_pressed('space'):
-            if drawMode == "OFF":
-                drawMode = "ON"
-            else:
-                drawMode = "OFF"
-                imgCanvas = np.zeros((height,width,3), np.uint8)
-                
-            time.sleep(0.3)
+            if keyboard.is_pressed('space'):
+                gameRunning = "ON"
+            if keyboard.is_pressed('escape'):
+                cap.release()
+                cv2.destroyAllWindows()
+                return render_template("index.html")
+                quit()
 
-        img = detector.findHands(img, draw = False)
-        lmList = detector.findPosition(img, draw = True)
-        
-        # Hand Detected
-        if len(lmList)>0:
+        # Player Dies
+        elif gameRunning == "DEAD":
+            cv2.putText(img,"YOU DIED",(width // 2 - 300, height // 4),3,3,RED,3,cv2.LINE_AA)
+            cv2.putText(img,"PRESS SPACE TO START",(0, height // 2),3,2,RED,3,cv2.LINE_AA)
+            cv2.putText(img,"PRESS ESCAPE TO EXIT",(0, height * 3 // 4),3,2,RED,3,cv2.LINE_AA)
 
-            fist = detector.fistOrientation()
+            if keyboard.is_pressed('space'):
+                # Reset game attributes
+                playerScore = 0
+                currentLives = maxLives
+                ghostSpeed = 2
+                ghostSpawnCap = 1
+                ghosts = []
+                gameRunning = "ON"
 
-            # Top pointer knuckle
-            topknuckle = 5
-            # Bottom pointer knuckle
-            botknuckle = 6
+            if keyboard.is_pressed('escape'):
+                cap.release()
+                cv2.destroyAllWindows()
+                return render_template("index.html")
+                quit()
+            
+        ########## GAME RUNNING ##########
+        else:
+            ########## HAND DETECTION ##########
+            img = detector.findHands(img, draw = False)
+            lmList = detector.findPosition(img, draw = False)
+            
+            # Hand Detected
+            if len(lmList)>0:
 
-            # Offset distance   
-            offset = 100
-            # Draw from knuckles of pointer finger with offset
-            drawx,drawy = (lmList[topknuckle][1] + lmList[botknuckle][1]) // 2, (lmList[topknuckle][2] + lmList[botknuckle][2]) // 2 - offset
+                fist = detector.fistOrientation()
 
-            if drawMode == "ON":
+                # Top pointer knuckle
+                topknuckle = 5
+                # Bottom pointer knuckle
+                botknuckle = 6
+
+                # Offset distance   
+                offset = 150
+                # Draw from knuckles of pointer finger with offset
+                drawx,drawy = (lmList[topknuckle][1] + lmList[botknuckle][1]) // 2, (lmList[topknuckle][2] + lmList[botknuckle][2]) // 2 - offset
+
                 # Predict mode
                 if fist == "horizontal":
-                    drawColor = BLACK
 
                     shape_xcoords = sorted(shape_xcoords)
                     shape_ycoords = sorted(shape_ycoords)
@@ -132,21 +186,45 @@ def strt():
                         image = cv2.resize(image,(50,50))/255
 
                         # Get label from model prediction
-                        label = str(shapeLABELS[np.argmax(model.predict(image.reshape(1,50,50,1)))])
+                        labelIdx = np.argmax(model.predict(image.reshape(1,50,50,1)))
 
-                        # Display the label on the screen
-                        cv2.rectangle(imgCanvas,(rect_min_x+50,rect_min_y-20),(rect_min_x,rect_min_y),WHITE,-1)
-                        cv2.putText(imgCanvas,label,(rect_min_x,rect_min_y-5),3,0.5,GREEN,1,cv2.LINE_AA)
+                        # Check ghost label and remove dead ghosts
+                        dead_ghosts = []
+                        for g in ghosts:
+                            g.checkMatch(labelIdx)
+                            if g.isDead():
+                                dead_ghosts.append(g)
+                                playerScore += 1
+
+                        for g in dead_ghosts:
+                            ghosts.remove(g)
+
+                        # Clear Screen
+                        imgCanvas = np.zeros((height,width,3), np.uint8)
 
                         # Reset coordinates for next shape
                         shape_xcoords = []
                         shape_ycoords = []
 
+                    if (wandHand == "L"):
+                        overlay_transparent(img, wandimg_LHanded, drawx, drawy + wandHeight //2)
+                        cv2.circle(img, (drawx + offset, drawy-30 + offset), 30, symbolColors[labelIdx], cv2.FILLED)
+                    else:
+                        overlay_transparent(img, wandimg_RHanded, drawx - wandWidth, drawy + wandHeight //2)
+                        cv2.circle(img, (drawx - offset, drawy-30 + offset), 30, symbolColors[labelIdx], cv2.FILLED)
+
                     xp, yp = 0, 0
 
                 # Drawing Mode
                 elif fist == "vertical":
-                    drawColor = GREEN
+
+                    # Identify left or right hand
+                    if (lmList[botknuckle][1] > lmList[topknuckle][1]):
+                        wandHand = "L"
+                    else:
+                        wandHand = "R"
+
+                    overlay_transparent(img, wandimg, drawx - wandWidth //2, drawy)
 
                     shape_xcoords.append(drawx)
                     shape_ycoords.append(drawy)
@@ -162,41 +240,69 @@ def strt():
                     xp, yp = drawx, drawy
 
                 else:
+                    overlay_transparent(img, wandimg, drawx - wandWidth //2, drawy)
                     xp, yp = 0, 0
 
-            # End program when pointer goes to exit button
-            if drawx > 1160 and drawy < 125:
-                cap.release()
-                cv2.destroyAllWindows()
-                return render_template("index.html")
-                quit()
+                # End program when pointer goes to exit button
+                if drawx > 1160 and drawy < 125:
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    return render_template("index.html")
+                    quit()
 
-        ########## GAME ##########
+            ########## GAME ##########
 
-        cv2.putText(img,f'Score: {playerScore}',(10,70),3,1,BLACK,2,cv2.LINE_AA)
-        
-        # Draw player hitbox
-        cv2.rectangle(img, playerPos, (playerPos[0]+playerHbWidth, playerPos[1]+playerHbHeight), RED, 2)
-
-        # Move and draw ghosts
-        for g in ghosts:
-            g.move()
-            ghostX, ghostY = int(g.x), int(g.y)
-            overlay_transparent(img, ghostimg, ghostX, ghostY)
-            temp = 0
-            for s in g.symbols:
-                symbolX, symbolY = ghostX + (temp * 10), ghostY + ghostHeight + 10
-                overlay_transparent(img, ghostimg, symbolX, symbolY)
-                temp = temp + 1
-
-            # Check collision with player
-            if (ghostX + ghostWidth > playerPos[0] and ghostX < playerPos[0] + playerHbWidth and
-                ghostY + ghostHeight > playerPos[1] and ghostY < playerPos[1] + playerHbHeight):
-                playerScore += 1
-                # Reset ghost position
-                g.x = np.random.randint(0, width - ghostWidth)
-                g.y = np.random.randint(0, height - ghostHeight)
+            cv2.putText(img,f'Score: {playerScore}',(10,70),3,3,WHITE,3,cv2.LINE_AA)
             
+            # Draw player heart
+            overlay_transparent(img, heartimg, playerPos[0] - (heartWidth - playerHbWidth) // 2, playerPos[1] - (heartHeight - playerHbHeight) // 2)
+            cv2.putText(img,f'{currentLives}',(playerPos[0] + playerHbWidth//2 - 30, playerPos[1] + playerHbHeight//2 + 30),3,3,WHITE,3,cv2.LINE_AA)
+
+            # Create ghost
+            if (random.randint(0,100) <= ghostSpawnRate and len(ghosts) < ghostSpawnCap):
+                ghosts.append(Ghost.Ghost(ghostSpawnX[random.randint(0,1)], random.randint(0 - ghostHeight, height - ghostHeight), playerPos[0] + playerHbWidth//2, playerPos[1] + playerHbHeight//2, ghostSpeed))
+
+                # Update ghost cap and speed
+                match playerScore:
+                    case 3:
+                        ghostSpawnCap = 2
+                        ghostSpeed = 3
+                    case 8:
+                        ghostSpawnCap = 4
+                        ghostSpeed = 4
+                    case 15:
+                        ghostSpawnCap = 8
+                        ghostSpeed = 5
+
+            # Ghost loop
+            dead_ghosts = []
+            for g in ghosts:
+                g.move()
+                ghostX, ghostY = int(g.x), int(g.y)
+                if (g.flipped):
+                    ghostimg_flipped = cv2.flip(ghostimg, 1)
+                    overlay_transparent(img, ghostimg_flipped, ghostX, ghostY)
+                else:
+                    overlay_transparent(img, ghostimg, ghostX, ghostY)
+
+                symbolIdx = 0
+                for s in g.symbols:
+                    symbolX, symbolY = ghostX + (symbolIdx * symbolSize[0]) + 10, ghostY + ghostHeight + 10
+                    overlay_transparent(img, symbolImages[s], symbolX, symbolY)
+                    symbolIdx += 1
+
+                # Check collision with player
+                if (ghostX + ghostWidth > playerPos[0] and ghostX < playerPos[0] + playerHbWidth and
+                    ghostY + ghostHeight > playerPos[1] and ghostY < playerPos[1] + playerHbHeight):
+                        currentLives -= 1
+
+                        if (currentLives == 0):
+                            gameRunning = "DEAD"
+                        
+                        dead_ghosts.append(g)
+
+            for g in dead_ghosts:
+                ghosts.remove(g)
 
 
         imgGray = cv2.cvtColor(imgCanvas, cv2.COLOR_BGR2GRAY)
@@ -204,30 +310,58 @@ def strt():
         imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, imgCanvas)
-        
-        #img[0:125, 1160:1280] = header
+
         pygame.display.update()
         cv2.imshow("Image",img)
         cv2.waitKey(1)
 
 def overlay_transparent(bg, fg, x, y):
-    h, w = fg.shape[:2]
+    bg_h, bg_w = bg.shape[:2]
+    fg_h, fg_w = fg.shape[:2]
 
-    # Split the channels of the foreground
-    b, g, r, a = cv2.split(fg)
+    # Completely outside (to the right or bottom)
+    if x >= bg_w or y >= bg_h or x + fg_w <= 0 or y + fg_h <= 0:
+        return
+
+    # Crop foreground if partially outside the left or top
+    fg_x_start = 0
+    fg_y_start = 0
+
+    if x < 0:
+        fg_x_start = -x
+        fg_w = fg_w + x  # since x is negative
+        x = 0
+    if y < 0:
+        fg_y_start = -y
+        fg_h = fg_h + y
+        y = 0
+
+    # Limit width and height to fit background
+    overlay_w = min(fg_w, bg_w - x)
+    overlay_h = min(fg_h, bg_h - y)
+
+    # If after clipping it's invalid, skip
+    if overlay_w <= 0 or overlay_h <= 0:
+        return
+
+    # Crop fg to match the overlay region
+    fg_crop = fg[fg_y_start:fg_y_start+overlay_h, fg_x_start:fg_x_start+overlay_w]
+
+    # Split the channels
+    b, g, r, a = cv2.split(fg_crop)
     alpha = a.astype(float) / 255.0
     alpha = cv2.merge([alpha, alpha, alpha])
 
-    # Region of interest (ROI) in the background
-    roi = bg[y:y+h, x:x+w]
+    # ROI in bg
+    roi = bg[y:y+overlay_h, x:x+overlay_w]
 
-    # Convert fg to BGR only
     fg_rgb = cv2.merge([b, g, r]).astype(float)
     bg_rgb = roi.astype(float)
 
-    # Blend the images
-    blended = cv2.add(fg_rgb * alpha, bg_rgb * (1 - alpha))
+    # Blend
+    blended = fg_rgb * alpha + bg_rgb * (1 - alpha)
 
-    bg[y:y+h, x:x+w] = blended.astype(np.uint8)
+    # Put blended result back
+    bg[y:y+overlay_h, x:x+overlay_w] = blended.astype(np.uint8)
 
 strt()
