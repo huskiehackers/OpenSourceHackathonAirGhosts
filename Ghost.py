@@ -2,16 +2,19 @@ import math
 import random
 
 class Ghost :
-    
     def __init__(self, x, y, cx, cy, speed):
 
         self.x, self.y = x, y
         self.cx, self.cy = cx, cy
         self.speed = speed
+        self.flipped = False
         self.symbols = []
-        
-        for(i in range(5)):
-            addSymbol(self,random.randint(0,10)
+
+        if (self.x > cx):
+            self.flipped = True
+
+        for i in range(random.randint(1,5)):
+            self.addSymbol(random.randint(0,3))
 
     def move(self):
 
@@ -31,15 +34,17 @@ class Ghost :
         self.x += dx * self.speed
         self.y += dy * self.speed
     
-    def symbol(self,predict):
+    def checkMatch(self,predict):
         if(self.symbols[0] == predict):
             del self.symbols[0]
+        
+    def addSymbol(self, num):
+        self.symbols.append(num)
+        
+    def isDead(self):
         return len(self.symbols) == 0
         
-        
-    def addSymbol(self, num)
-        if(num >= 0 && num <= 3):
-            self.symbols.append(num)
+
         
             
             
