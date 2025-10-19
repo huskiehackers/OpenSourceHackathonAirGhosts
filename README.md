@@ -27,30 +27,6 @@ It uses **hand tracking**, **gesture recognition**, and a trained deep learning 
 
 ---
 
-## 📂 Project Structure
-
-📁 OpenSourceHackathonAirGhosts/
-│
-├── assets/ # Game assets (heart, ghost, symbols, wand)
-│ ├── heart.png
-│ ├── ghost.png
-│ ├── UpArr.png
-│ ├── DownArr.png
-│ ├── Hori.png
-│ ├── Vert.png
-│ └── wand.png
-│
-├── HandTrackingModule.py # Custom hand tracking script
-├── Ghost.py # Ghost class logic
-├── gdraw.keras # Trained shape recognition model
-├── main.py # Main game logic (code above)
-├── templates/
-│ └── index.html # Flask template
-├── static/ # Static files (if needed)
-└── README.md # Project documentation
-
----
-
 ## 🧠 How It Works
 
 1. The webcam captures your hand movements in real time.
